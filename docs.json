@@ -12,18 +12,6 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart"
-            ]
-          }
-        ]
-      },
-      {
         "tab": "API reference",
         "groups": [
           {
@@ -55,12 +43,20 @@
         {
           "anchor": "Dashboard",
           "href": "https://fotolabs.co",
-          "icon": "gauge"
+          "icon": "gauge",
+          "color": {
+            "light": "#0075ff",
+            "dark": "#0075ff"
+          }
         },
         {
           "anchor": "Support",
-          "href": "mailto:support@fotolabs.co",
-          "icon": "envelope"
+          "href": "mailto:ayush@fotolabs.co",
+          "icon": "envelope",
+          "color": {
+            "light": "#0075ff",
+            "dark": "#0075ff"
+          }
         }
       ]
     }

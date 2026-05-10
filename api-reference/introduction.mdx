@@ -1,14 +1,13 @@
 ---
-title: 'API reference'
-description: 'Programmatic access to the Fotolabs image processing pipeline'
+title: "API reference"
+description: "Programmatic access to the Fotolabs image processing pipeline"
 ---
 
 ## Base URLs
 
 | Environment | URL |
-|---|---|
+| --- | --- |
 | Production | `https://api.fotolabs.co` |
-| Staging | `https://api-staging.fotolabs.co` |
 
 ## Authentication
 
@@ -27,16 +26,13 @@ Get your API key from the [Fotolabs dashboard](https://fotolabs.co).
     `POST /v1/projects` — create a project for a listing.
   </Step>
   <Step title="Upload images">
-    `POST /v1/images/upload-url` for each file → `PUT <uploadUrl>` directly to S3.
-    Repeat for every image; no client-side grouping needed.
+    `POST /v1/images/upload-url` for each file → `PUT <uploadUrl>` directly to S3. Repeat for every image; no client-side grouping needed.
   </Step>
   <Step title="Trigger processing">
-    `POST /v1/projects/{projectId}/process` — enqueues all jobs in one call.
-    HDR bracket sets are detected automatically from EXIF metadata.
+    `POST /v1/projects/{projectId}/process` — enqueues all jobs in one call. HDR bracket sets are detected automatically from EXIF metadata.
   </Step>
   <Step title="Poll for results">
-    `GET /v1/projects/{projectId}` — check `status`. When it's `completed`,
-    all `resultImageUrl` values are ready.
+    `GET /v1/projects/{projectId}` — check `status`. When it's `completed`, all `resultImageUrl` values are ready.
   </Step>
 </Steps>
 
@@ -51,16 +47,14 @@ Projects move through `pending` → `processing` → `completed`.
 ## Plans
 
 | Plan | API access |
-|---|---|
+| --- | --- |
 | `free` | Blocked |
 | `essential` / `ultimate` (PAYG) | Charged once per project at the plan rate |
 | `essential_monthly` / `ultimate_monthly` | Deducts one listing from your monthly quota; overage rate applies if quota is exhausted |
 
 ## HDR bracket detection
 
-Upload all bracket exposures flat — no grouping needed on the client. When you call
-`POST /v1/projects/{projectId}/process`, images captured within `bracketWindowSeconds`
-of each other with an EV spread ≥ 0.5 stops are automatically grouped as HDR bracket sets.
+Upload all bracket exposures flat — no grouping needed on the client. When you call `POST /v1/projects/{projectId}/process`, images captured within `bracketWindowSeconds` of each other with an EV spread ≥ 0.5 stops are automatically grouped as HDR bracket sets.
 
 ## Processing time
 
