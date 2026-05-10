@@ -1,54 +1,309 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "OpenAPI Plant Store",
-    "description": "A sample API that uses a plant store as an example to demonstrate features in the OpenAPI specification",
-    "license": {
-      "name": "MIT"
-    },
-    "version": "1.0.0"
+    "title": "Fotolabs API",
+    "version": "1.0.0",
+    "description": "Programmatic access to the Fotolabs image processing pipeline.\n\n**Base URL:** `https://api.fotolabs.co` (prod) · `https://api-staging.fotolabs.co` (staging)\n\n**Authentication:** Pass your API key as a Bearer token on every request.\n```\nAuthorization: Bearer fl_<key>\n```\n\n**Typical flow:**\n1. `POST /v1/projects` — create a project\n2. `POST /v1/images/upload-url` + `PUT <uploadUrl>` — repeat for each image (no grouping needed)\n3. `POST /v1/projects/{projectId}/process` — process the whole project in one call\n4. `GET /v1/projects/{projectId}` — poll until `status` is `completed`; response includes all images and their result URLs\n\n**Project lifecycle:** `pending` → `processing` → `completed`\n- Images can only be uploaded to a `pending` project.\n- Processing can only be triggered on a `pending` project.\n- Once processing starts the project is locked — create a new project for additional images.\n\n**Plans:**\n- `free` — API access blocked.\n- `essential` / `ultimate` (PAYG) — charged once per project at the plan rate.\n- `essential_monthly` / `ultimate_monthly` — deducts one listing from your monthly quota; overage rate applies if quota is exhausted.\n"
   },
   "servers": [
     {
-      "url": "http://sandbox.mintlify.com"
+      "url": "https://api.fotolabs.co",
+      "description": "Production"
+    },
+    {
+      "url": "https://api-staging.fotolabs.co",
+      "description": "Staging"
     }
   ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API key with `fl_` prefix, issued from the Fotolabs dashboard"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "No payment method on file. Please add one at fotolabs.co before processing images."
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "name"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "ca5f09f7-6838-459c-ac0f-7be03c60de24"
+          },
+          "name": {
+            "type": "string",
+            "example": "233 Broadway, New York, NY"
+          }
+        }
+      },
+      "UploadUrlResponse": {
+        "type": "object",
+        "required": [
+          "imageId",
+          "uploadUrl",
+          "originalImageUrl",
+          "expiresAt"
+        ],
+        "properties": {
+          "imageId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "f3e088d1-33a5-4227-a2f6-c4f75617f847"
+          },
+          "uploadUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Presigned S3 PUT URL. Upload the file here with the matching Content-Type. Valid for 1 hour.",
+            "example": "https://fotolabs-images-staging.s3.amazonaws.com/..."
+          },
+          "originalImageUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "CloudFront URL where the original will be accessible after upload.",
+            "example": "https://d1i1ga8jkrbik1.cloudfront.net/..."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the presigned URL expires.",
+            "example": "2026-05-09T19:00:00.000Z"
+          }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "required": [
+          "jobId",
+          "type",
+          "imageIds"
+        ],
+        "properties": {
+          "jobId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The primary imageId for this job. Use this to poll status."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "single",
+              "hdr"
+            ],
+            "description": "`single` for a standalone image; `hdr` for an auto-detected HDR bracket set."
+          },
+          "imageIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "All imageIds in this job. HDR jobs have multiple; single jobs have one."
+          }
+        }
+      },
+      "ProcessResponse": {
+        "type": "object",
+        "required": [
+          "jobs"
+        ],
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          }
+        }
+      },
+      "ProjectStatus": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "status",
+          "images"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageStatus"
+            }
+          }
+        }
+      },
+      "ImageStatus": {
+        "type": "object",
+        "required": [
+          "imageId",
+          "status",
+          "resultImageUrl",
+          "originalImageUrl",
+          "errorMessage",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "imageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "completed",
+              "failed"
+            ]
+          },
+          "resultImageUrl": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "description": "CloudFront URL of the processed JPEG. Non-null only when `status` is `completed`."
+          },
+          "originalImageUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "CloudFront URL of the original uploaded image."
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human-readable error. Non-null only when `status` is `failed`."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  },
   "security": [
     {
-      "bearerAuth": []
+      "ApiKeyAuth": []
     }
   ],
   "paths": {
-    "/plants": {
-      "get": {
-        "description": "Returns all plants from the system that the user has access to",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "The maximum number of results to return",
-            "schema": {
-              "type": "integer",
-              "format": "int32"
+    "/v1/projects": {
+      "post": {
+        "summary": "Create a project",
+        "operationId": "createProject",
+        "description": "Creates a new project (listing). Returns a `projectId` to use in subsequent upload and process calls.\nNew projects start in `pending` status.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Property address or display name.",
+                    "example": "233 Broadway, New York, NY"
+                  },
+                  "templateId": {
+                    "type": "string",
+                    "enum": [
+                      "original",
+                      "twilight",
+                      "virtual-stage"
+                    ],
+                    "default": "original",
+                    "description": "Default AI enhancement style for this project.\nCan be overridden when calling process.\n"
+                  }
+                }
+              },
+              "example": {
+                "name": "233 Broadway, New York, NY",
+                "templateId": "original"
+              }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
-            "description": "Plant response",
+            "description": "Project created.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Plant"
+                  "$ref": "#/components/schemas/Project"
+                },
+                "example": {
+                  "projectId": "ca5f09f7-6838-459c-ac0f-7be03c60de24",
+                  "name": "233 Broadway, New York, NY"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "missingName": {
+                    "value": {
+                      "error": "name is required"
+                    }
+                  },
+                  "nameTooLong": {
+                    "value": {
+                      "error": "name must be 200 characters or fewer"
+                    }
+                  },
+                  "badTemplate": {
+                    "value": {
+                      "error": "Invalid templateId. Allowed: original, twilight, virtual-stage"
+                    }
                   }
                 }
               }
             }
           },
-          "400": {
-            "description": "Unexpected error",
+          "401": {
+            "description": "Invalid or missing API key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -56,39 +311,16 @@
                 }
               }
             }
-          }
-        }
-      },
-      "post": {
-        "description": "Creates a new plant in the store",
-        "requestBody": {
-          "description": "Plant to add to the store",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
-              }
-            }
           },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "plant response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Plant"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "unexpected error",
+          "403": {
+            "description": "API access not available on the free plan.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "API access requires an Essential or Ultimate plan. Upgrade at fotolabs.co"
                 }
               }
             }
@@ -96,28 +328,275 @@
         }
       }
     },
-    "/plants/{id}": {
-      "delete": {
-        "description": "Deletes a single plant based on the ID supplied",
+    "/v1/images/upload-url": {
+      "post": {
+        "summary": "Get a presigned upload URL",
+        "operationId": "getUploadUrl",
+        "description": "Creates a pending image record and returns a presigned S3 PUT URL.\n\n**Supported formats:** JPEG, PNG, and RAW files — NEF, CR2, CR3, ARW, DNG, ORF, RW2, RAF, PEF, MRW, SRW, RAW.\n\nAfter receiving the URL, upload the file directly to S3 with a `PUT` request using the\nmatching `Content-Type` header. No auth header is needed on the S3 upload.\n\nThe pipeline (RAW vs JPEG) is chosen automatically from the file extension.\n\n**Project must be in `pending` status.** Uploads are blocked once processing has started or completed.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "filename",
+                  "projectId"
+                ],
+                "properties": {
+                  "filename": {
+                    "type": "string",
+                    "description": "Original filename including extension. Determines file type and S3 Content-Type.",
+                    "example": "Z6A_0235.NEF"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Project this image belongs to. Must be in `pending` status.",
+                    "example": "ca5f09f7-6838-459c-ac0f-7be03c60de24"
+                  }
+                }
+              },
+              "example": {
+                "filename": "Z6A_0235.NEF",
+                "projectId": "ca5f09f7-6838-459c-ac0f-7be03c60de24"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Presigned URL ready. Upload the file within 1 hour.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadUrlResponse"
+                },
+                "example": {
+                  "imageId": "f3e088d1-33a5-4227-a2f6-c4f75617f847",
+                  "uploadUrl": "https://fotolabs-images-staging.s3.amazonaws.com/...",
+                  "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                  "expiresAt": "2026-05-09T19:00:00.000Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "missingFilename": {
+                    "value": {
+                      "error": "filename is required"
+                    }
+                  },
+                  "unsupportedExtension": {
+                    "value": {
+                      "error": "Unsupported file extension: .bmp"
+                    }
+                  },
+                  "missingProject": {
+                    "value": {
+                      "error": "projectId is required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Project not found or does not belong to your workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Project not found or access denied"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Project is not in `pending` status — uploads are locked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "processing": {
+                    "summary": "Project is currently processing",
+                    "value": {
+                      "error": "Project is currently processing. Wait for it to complete before uploading more images."
+                    }
+                  },
+                  "completed": {
+                    "summary": "Project already processed",
+                    "value": {
+                      "error": "Project has already been processed. Create a new project to process more images."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/projects/{projectId}/process": {
+      "post": {
+        "summary": "Process all images in a project",
+        "operationId": "processProject",
+        "description": "Fetches all `pending` images for the project, auto-detects HDR bracket sets from EXIF\nmetadata, groups them, and enqueues all jobs in a single call.\n\n**Project must be in `pending` status.** Returns 409 if already processing or completed.\n\nOnce this call succeeds, the project moves to `processing` status — no further uploads\nare accepted and this endpoint cannot be called again for the same project.\n\n**HDR detection:** Images captured within `bracketWindowSeconds` of each other with\nan EV spread ≥ 0.5 stops are automatically grouped as HDR bracket sets. No client-side\ngrouping is needed — upload all images flat and let the API handle it.\n\n**Payment:** Charged once per project.\n- PAYG plans (`essential` / `ultimate`): charged at the plan rate from your pricing tier.\n- Monthly plans: deducts one listing from your quota; if exhausted, the overage rate is charged.\n- Second call on the same project (after adding more images): free — project is already paid.\n",
         "parameters": [
           {
-            "name": "id",
+            "name": "projectId",
             "in": "path",
-            "description": "ID of plant to delete",
             "required": true,
             "schema": {
-              "type": "integer",
-              "format": "int64"
-            }
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "ca5f09f7-6838-459c-ac0f-7be03c60de24"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "templateId": {
+                    "type": "string",
+                    "enum": [
+                      "original",
+                      "twilight",
+                      "virtual-stage"
+                    ],
+                    "default": "original",
+                    "description": "AI enhancement style. Overrides the project-level default."
+                  },
+                  "autoLevel": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically correct horizon tilt using Hough line detection."
+                  },
+                  "lensCorrection": {
+                    "type": "boolean",
+                    "description": "Override lens distortion correction. Omit to use automatic detection (recommended).\n`false` skips correction; `true` forces it.\n"
+                  },
+                  "changeRequestNote": {
+                    "type": "string",
+                    "description": "Free-text instruction passed to the AI model for all images in this batch.",
+                    "example": "Brighten the foreground and add a warm sunset tone"
+                  },
+                  "bracketWindowSeconds": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 30,
+                    "default": 2,
+                    "description": "Time window in seconds used to group HDR bracket exposures."
+                  }
+                }
+              },
+              "example": {
+                "templateId": "original",
+                "autoLevel": true
+              }
+            }
+          }
+        },
         "responses": {
-          "204": {
-            "description": "Plant deleted",
-            "content": {}
+          "200": {
+            "description": "All jobs enqueued. Project is now in `processing` status.\nPoll each `jobId` via `GET /v1/images/{imageId}`.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProcessResponse"
+                },
+                "example": {
+                  "jobs": [
+                    {
+                      "jobId": "aaa-...",
+                      "type": "hdr",
+                      "imageIds": [
+                        "aaa-...",
+                        "bbb-...",
+                        "ccc-..."
+                      ]
+                    },
+                    {
+                      "jobId": "ddd-...",
+                      "type": "hdr",
+                      "imageIds": [
+                        "ddd-...",
+                        "eee-..."
+                      ]
+                    },
+                    {
+                      "jobId": "fff-...",
+                      "type": "single",
+                      "imageIds": [
+                        "fff-..."
+                      ]
+                    },
+                    {
+                      "jobId": "ggg-...",
+                      "type": "single",
+                      "imageIds": [
+                        "ggg-..."
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
           },
           "400": {
-            "description": "unexpected error",
+            "description": "No pending images found, or validation error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "noPendingImages": {
+                    "value": {
+                      "error": "No pending images found for this project. Upload images first."
+                    }
+                  },
+                  "badTemplate": {
+                    "value": {
+                      "error": "Invalid templateId. Allowed: original, twilight, virtual-stage"
+                    }
+                  },
+                  "badWindow": {
+                    "value": {
+                      "error": "bracketWindowSeconds must be between 0.5 and 30"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
             "content": {
               "application/json": {
                 "schema": {
@@ -125,92 +604,285 @@
                 }
               }
             }
-          }
-        }
-      }
-    }
-  },
-  "webhooks": {
-    "/plant/webhook": {
-      "post": {
-        "description": "Information about a new plant added to the store",
-        "requestBody": {
-          "description": "Plant added to the store",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NewPlant"
+          },
+          "402": {
+            "description": "Payment required or card failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "noPaymentMethod": {
+                    "summary": "No card on file",
+                    "value": {
+                      "error": "No payment method on file. Please add one at fotolabs.co before processing images."
+                    }
+                  },
+                  "cardDeclined": {
+                    "summary": "Card declined",
+                    "value": {
+                      "error": "Your card was declined."
+                    }
+                  },
+                  "requires3ds": {
+                    "summary": "3DS authentication required",
+                    "value": {
+                      "error": "Your card requires additional authentication. Please complete payment at fotolabs.co before using the API."
+                    }
+                  },
+                  "quotaExceededNoCard": {
+                    "summary": "Monthly quota exhausted, no fallback card",
+                    "value": {
+                      "error": "Monthly quota exceeded and no payment method on file. Please update billing at fotolabs.co"
+                    }
+                  }
+                }
               }
             }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Return a 200 status to indicate that the data was received successfully"
-          }
-        }
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Plant": {
-        "required": [
-          "name"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "description": "The name of the plant",
-            "type": "string"
           },
-          "tag": {
-            "description": "Tag to specify the type",
-            "type": "string"
-          }
-        }
-      },
-      "NewPlant": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/Plant"
-          },
-          {
-            "required": [
-              "id"
-            ],
-            "type": "object",
-            "properties": {
-              "id": {
-                "description": "Identification number of the plant",
-                "type": "integer",
-                "format": "int64"
+          "403": {
+            "description": "Free plan workspace or project belongs to a different workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "freePlan": {
+                    "value": {
+                      "error": "API access requires an Essential or Ultimate plan. Upgrade at fotolabs.co"
+                    }
+                  },
+                  "wrongWorkspace": {
+                    "value": {
+                      "error": "Project not found or access denied"
+                    }
+                  }
+                }
               }
             }
-          }
-        ]
-      },
-      "Error": {
-        "required": [
-          "error",
-          "message"
-        ],
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "integer",
-            "format": "int32"
           },
-          "message": {
-            "type": "string"
+          "404": {
+            "description": "Project not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Project not found or access denied"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Project is not in `pending` status — processing is locked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "alreadyProcessing": {
+                    "summary": "Already in progress",
+                    "value": {
+                      "error": "Project is already processing."
+                    }
+                  },
+                  "alreadyCompleted": {
+                    "summary": "Already done",
+                    "value": {
+                      "error": "Project has already been processed. Create a new project to process more images."
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
     },
-    "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer"
+    "/v1/projects/{projectId}": {
+      "get": {
+        "summary": "Get project status and all image results",
+        "operationId": "getProject",
+        "description": "Poll this after calling `POST /v1/projects/{projectId}/process`.\n\nReturns the project status and the current state of every image in the project.\nThe project moves to `completed` once all jobs finish.\n\n**Polling tip:** check `project.status` — when it's `completed` all images are done.\nIndividual images may still be `processing` while `project.status` is `processing`.\n",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "ca5f09f7-6838-459c-ac0f-7be03c60de24"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project and image statuses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectStatus"
+                },
+                "example": {
+                  "projectId": "ca5f09f7-6838-459c-ac0f-7be03c60de24",
+                  "status": "completed",
+                  "images": [
+                    {
+                      "imageId": "aaa-...",
+                      "status": "completed",
+                      "resultImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/.../result/aaa-....jpg",
+                      "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                      "errorMessage": null,
+                      "createdAt": "2026-05-09T18:00:48.421Z",
+                      "updatedAt": "2026-05-09T18:06:00.240Z"
+                    },
+                    {
+                      "imageId": "bbb-...",
+                      "status": "failed",
+                      "resultImageUrl": null,
+                      "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                      "errorMessage": "Gemini API quota exceeded after 5 retries",
+                      "createdAt": "2026-05-09T18:00:50.000Z",
+                      "updatedAt": "2026-05-09T18:07:00.000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found or belongs to a different workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Project not found or access denied"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/images/{imageId}": {
+      "get": {
+        "summary": "Get image status",
+        "operationId": "getImage",
+        "description": "Poll this endpoint after calling `POST /v1/projects/{projectId}/process`.\nUse the `jobId` values from the process response.\n\nProcessing typically completes in **60–120 seconds** per job.\nHDR merge jobs may take slightly longer.\n\nFor HDR jobs, `resultImageUrl` is populated only on the primary image (`jobId`).\nThe other bracket members in the group will have `status: completed` but no `resultImageUrl`.\n",
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "f3e088d1-33a5-4227-a2f6-c4f75617f847"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageStatus"
+                },
+                "examples": {
+                  "pending": {
+                    "summary": "Queued, not yet started",
+                    "value": {
+                      "imageId": "f3e088d1-33a5-4227-a2f6-c4f75617f847",
+                      "status": "pending",
+                      "resultImageUrl": null,
+                      "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                      "errorMessage": null,
+                      "createdAt": "2026-05-09T18:00:48.421Z",
+                      "updatedAt": "2026-05-09T18:00:48.421Z"
+                    }
+                  },
+                  "processing": {
+                    "summary": "Currently processing",
+                    "value": {
+                      "imageId": "f3e088d1-33a5-4227-a2f6-c4f75617f847",
+                      "status": "processing",
+                      "resultImageUrl": null,
+                      "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                      "errorMessage": null,
+                      "createdAt": "2026-05-09T18:00:48.421Z",
+                      "updatedAt": "2026-05-09T18:01:10.000Z"
+                    }
+                  },
+                  "completed": {
+                    "summary": "Done — result ready",
+                    "value": {
+                      "imageId": "f3e088d1-33a5-4227-a2f6-c4f75617f847",
+                      "status": "completed",
+                      "resultImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/028584de-.../result/f3e088d1-...jpg",
+                      "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                      "errorMessage": null,
+                      "createdAt": "2026-05-09T18:00:48.421Z",
+                      "updatedAt": "2026-05-09T18:06:00.240Z"
+                    }
+                  },
+                  "failed": {
+                    "summary": "Failed",
+                    "value": {
+                      "imageId": "f3e088d1-33a5-4227-a2f6-c4f75617f847",
+                      "status": "failed",
+                      "resultImageUrl": null,
+                      "originalImageUrl": "https://d1i1ga8jkrbik1.cloudfront.net/...",
+                      "errorMessage": "Gemini API quota exceeded after 5 retries",
+                      "createdAt": "2026-05-09T18:00:48.421Z",
+                      "updatedAt": "2026-05-09T18:07:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Image not found or belongs to a different workspace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Image not found"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
