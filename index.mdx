@@ -1,0 +1,51 @@
+---
+title: "Fotolabs API"
+description: "AI-powered real estate photo enhancement and video generation"
+icon: 'camera'
+---
+
+## What you can build
+
+Use the Fotolabs API to plug AI photo enhancement into your own workflow — MLS integrations, photography apps, batch processing pipelines, and more.
+
+<Columns cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Upload and process your first batch of photos in minutes.
+  </Card>
+  <Card
+    title="API reference"
+    icon="terminal"
+    href="/api-reference/introduction"
+  >
+    Full reference for all endpoints, parameters, and responses.
+  </Card>
+</Columns>
+
+## How it works
+
+<Steps>
+  <Step title="Create a project">
+    One project per listing. Pass a name (address works great) and an enhancement style.
+  </Step>
+  <Step title="Upload images">
+    Get a presigned S3 URL for each photo and upload directly — JPEG, PNG, or RAW (NEF, CR2, ARW, DNG, and more).
+  </Step>
+  <Step title="Process">
+    One API call triggers the entire batch. HDR brackets are auto-detected from EXIF — no grouping needed on your end.
+  </Step>
+  <Step title="Get results">
+    Poll the project endpoint until `status` is `completed`. Each image returns a CDN URL with the processed result.
+  </Step>
+</Steps>
+
+## Enhancement styles
+
+| `templateId` | Description |
+|---|---|
+| `original` | Signature enhancement — shadow lift, highlight pull, lens correction, horizon leveling |
+| `twilight` | Day-to-dusk conversion with warm window glow |
+| `virtual-stage` | Adds contemporary Scandinavian furniture to empty rooms |

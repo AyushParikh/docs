@@ -1,0 +1,118 @@
+---
+title: "Quickstart"
+description: "Upload and process your first listing in minutes"
+icon: 'rocket'
+---
+
+## Prerequisites
+
+- A Fotolabs account on an Essential or Ultimate plan
+- Your API key from the [Fotolabs dashboard](https://fotolabs.co)
+
+## 1. Create a project
+
+```bash
+curl -X POST https://api.fotolabs.co/v1/projects \
+  -H "Authorization: Bearer fl_<key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "233 Broadway, New York, NY", "templateId": "original" }'
+```
+
+```json
+{
+  "projectId": "ca5f09f7-6838-459c-ac0f-7be03c60de24",
+  "name": "233 Broadway, New York, NY"
+}
+```
+
+Save the `projectId` — you'll use it in every subsequent call.
+
+## 2. Upload images
+
+Call this once per image. Supported formats: JPEG, PNG, NEF, CR2, CR3, ARW, DNG, ORF, RW2, RAF, and more.
+
+```bash
+curl -X POST https://api.fotolabs.co/v1/images/upload-url \
+  -H "Authorization: Bearer fl_<key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "filename": "Z6A_0235.NEF", "projectId": "ca5f09f7-..." }'
+```
+
+```json
+{
+  "imageId": "f3e088d1-33a5-4227-a2f6-c4f75617f847",
+  "uploadUrl": "https://fotolabs-images-prod.s3.amazonaws.com/...",
+  "originalImageUrl": "https://cdn.fotolabs.co/...",
+  "expiresAt": "2026-05-09T20:00:00.000Z"
+}
+```
+
+Then PUT the file directly to S3 — no auth header needed:
+
+```bash
+curl -X PUT "<uploadUrl>" \
+  -H "Content-Type: image/x-nikon-nef" \
+  --data-binary @Z6A_0235.NEF
+```
+
+Repeat for every photo in the listing.
+
+## 3. Process the project
+
+One call enqueues all images. HDR brackets are detected automatically from EXIF timestamps and exposure values — just upload everything flat.
+
+```bash
+curl -X POST https://api.fotolabs.co/v1/projects/ca5f09f7-.../process \
+  -H "Authorization: Bearer fl_<key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "templateId": "original", "autoLevel": true }'
+```
+
+```json
+{
+  "jobs": [
+    { "jobId": "aaa-...", "type": "hdr", "imageIds": ["aaa-...", "bbb-...", "ccc-..."] },
+    { "jobId": "ddd-...", "type": "single", "imageIds": ["ddd-..."] }
+  ]
+}
+```
+
+## 4. Poll for results
+
+Processing takes **60–120 seconds** per job. Poll the project until `status` is `completed`.
+
+```bash
+curl https://api.fotolabs.co/v1/projects/ca5f09f7-... \
+  -H "Authorization: Bearer fl_<key>"
+```
+
+```json
+{
+  "projectId": "ca5f09f7-...",
+  "status": "completed",
+  "images": [
+    {
+      "imageId": "aaa-...",
+      "status": "completed",
+      "resultImageUrl": "https://cdn.fotolabs.co/.../result/aaa-....jpg",
+      "originalImageUrl": "https://cdn.fotolabs.co/...",
+      "errorMessage": null,
+      "createdAt": "2026-05-09T18:00:48.421Z",
+      "updatedAt": "2026-05-09T18:06:00.240Z"
+    }
+  ]
+}
+```
+
+Download each `resultImageUrl` — that's your processed JPEG.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="All endpoints" icon="terminal" href="/api-reference/introduction">
+    Full parameter reference and error codes.
+  </Card>
+  <Card title="Enhancement styles" icon="palette" href="/api-reference/endpoint/create-project">
+    Twilight, virtual staging, and custom change request notes.
+  </Card>
+</CardGroup>
